@@ -355,7 +355,7 @@ Outputs are `pipeline_id`, `web_url`, `sha`, `status` and `finished`.
 Failed pipelines return a failing exit status.
 
 | Variable | Meaning |
-|---|---|
+| --- | --- |
 | `POLL_TIMEOUT` | Seconds between polls, defaulting to ten. |
 | `MAX_WAIT_MINUTES` | The optional polling deadline. |
 | `CHECK_RUNS` | Set `true` for a check per job and a pipeline summary check. |
@@ -403,7 +403,7 @@ Open the GitHub fork's Settings, Secrets and variables, Actions.
 Configure these repository variables.
 
 | Variable | Default |
-|---|---|
+| --- | --- |
 | `GITLAB_HOSTNAME` | `codebase.helmholtz.cloud` |
 | `GITLAB_PROJECT_ID` | `6627` |
 
