@@ -11,26 +11,27 @@ jobs:
     runs-on: ubuntu-latest
     permissions: {}
     steps:
-    - uses: actions/checkout@v7
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # Use version 7.0.1.
     - name: Lint markdown file
-      uses: avto-dev/markdown-lint@v1
+      uses: DavidAnson/markdownlint-cli2-action@21c1be1b93ad9ed58fa840aacc3f279cde2a72ff # Use version 24.2.0.
       with:
-        args: './README.md'
+        globs: './README.md'
   ShellCheck:
     runs-on: ubuntu-latest
     permissions: {}
     steps:
-    - uses: actions/checkout@v7
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # Use version 7.0.1.
     - name: Run shellcheck
-      uses: ludeeus/action-shellcheck@6d3f514f44620b9d4488e380339edc0d9bbe2fba
+      uses: ludeeus/action-shellcheck@00cae500b08a931fb5698e11e79bfbd38e612a38 # Use version 2.0.0.
   CheckBashisms:
     runs-on: ubuntu-latest
-    container: alpine:3.17
+    permissions: {}
+    container: alpine:3.24.3
     steps:
-    - uses: actions/checkout@v7
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # Use version 7.0.1.
     - name: Install checkbashisms
       run: 
-        apk add checkbashisms=2.22.2-r0
+        apk add --no-cache checkbashisms
     - name: run checkbashisms
       run: 
         checkbashisms *.sh
@@ -38,9 +39,9 @@ jobs:
     runs-on: ubuntu-latest
     permissions: {}
     steps:
-    - uses: actions/checkout@v7
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # Use version 7.0.1.
     - name: Install dependencies using micromamba
-      uses: mamba-org/setup-micromamba@v1
+      uses: mamba-org/setup-micromamba@f457c30a868e4760d3a6fcea5f25dc655b8edf39 # Use version 3.2.1.
       with:
         environment-file: etc/environment-lint.yml
     - name: Reformat code using black

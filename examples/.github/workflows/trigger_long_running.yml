@@ -35,7 +35,7 @@ jobs:
     outputs:
       pipeline_id: ${{ steps.start.outputs.pipeline_id }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # Use version 7.0.1.
         with:
           fetch-depth: 0
       - name: Push to GitLab
@@ -66,7 +66,7 @@ jobs:
       finished: ${{ steps.wait.outputs.finished }}
       pipeline_id: ${{ steps.wait.outputs.pipeline_id }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # Use version 7.0.1.
       - name: Wait for the pipeline
         id: wait
         uses: jakob-fritz/github2lab_action@main
@@ -94,7 +94,7 @@ jobs:
     if: ${{ !cancelled() && needs.wait.outputs.finished == 'true' }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # Use version 7.0.1.
       - name: Get the artifacts of the test stage
         uses: jakob-fritz/github2lab_action@main
         env:

@@ -55,7 +55,11 @@ runs:
         PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
       shell: bash
       if: (env.MODE == 'get_artifact') || (env.MODE == 'both') || (env.MODE == 'all')
-    - uses: actions/upload-artifact@v4
+    - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # Use version 7.0.2.
+      env:
+        GITLAB_TOKEN: ''
+        GITLAB_TRIGGER_TOKEN: ''
+        GITHUB_TOKEN: ''
       with:
         path: ./artifacts/
       if: ((env.MODE == 'get_artifact') || (env.MODE == 'both') || (env.MODE == 'all')) && (env.UPLOAD_ARTIFACTS != 'false')

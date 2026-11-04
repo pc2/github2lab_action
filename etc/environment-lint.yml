@@ -6,7 +6,6 @@
 name: github2lab_action
 channels:
   - conda-forge
-  - defaults
 dependencies:
   - black
   - ruff

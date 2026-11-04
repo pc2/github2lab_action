@@ -167,7 +167,7 @@ in the jobs. By this, only those jobs can access the variables.
 
 ``` yaml
 - name: Checkout
-  uses: actions/checkout@v4
+  uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
 - name: Mirror and get status
   uses: jakob-fritz/github2lab_action@main
   env:
@@ -185,7 +185,7 @@ in GitHub in between, the following example may be more suited.
 
 ``` yaml
 - name: Checkout
-  uses: actions/checkout@v4
+  uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
 - name: Mirror
   uses: jakob-fritz/github2lab_action@main
   env:
@@ -290,6 +290,13 @@ the SHA of the checkout is set to the latest commit in the pull-request.
 A workflow similar to the one described above can be found in the project
 [pySDC](<https://github.com/Parallel-in-Time/pySDC>)
 by the Parallel-in-Time community.
+
+## Workflow dependencies
+
+The external actions are pinned to full commit hashes.
+The tokens are only passed to the actions which need them so can they only
+be read by two offical github actions: `checkout` and `upload-artifact`.
+The token environment variables are cleared after used.
 
 ## Triggering a pipeline
 

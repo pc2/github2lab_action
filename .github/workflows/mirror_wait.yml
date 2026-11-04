@@ -15,43 +15,47 @@ jobs:
       statuses: write
       checks: write
     env:
-      GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
-      GITLAB_TRIGGER_TOKEN: ${{ secrets.GITLAB_TRIGGER_TOKEN }}
+      HAS_TRIGGER_TOKEN: ${{ secrets.GITLAB_TRIGGER_TOKEN != '' }}
       GITLAB_HOSTNAME: ${{ vars.GITLAB_HOSTNAME || 'codebase.helmholtz.cloud' }}
       GITLAB_PROJECT_ID: ${{ vars.GITLAB_PROJECT_ID || '6627' }}
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
     - name: Validate test destination
       if: (vars.GITLAB_HOSTNAME == '') != (vars.GITLAB_PROJECT_ID == '')
       run: |
         echo '::error::Set both GITLAB_HOSTNAME and GITLAB_PROJECT_ID repository variables.'
         exit 1
-    - uses: actions/checkout@v7
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # Use version 7.0.1.
     - name: Mirror
       uses: ./
       env:
         MODE: 'mirror'
+        GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
         FORCE_PUSH: "true"
     - name: Get-CI-State
       uses: ./
       env:
         MODE: 'get_status'
+        GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         FORCE_PUSH: "true"
     - name: Get-Artifacts
       uses: ./
       env:
         MODE: 'get_artifact'
+        GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
     - name: Trigger with variables
       id: trigger
-      if: env.GITLAB_TRIGGER_TOKEN != ''
+      if: env.HAS_TRIGGER_TOKEN == 'true'
       uses: ./
       env:
         MODE: trigger
+        GITLAB_TRIGGER_TOKEN: ${{ secrets.GITLAB_TRIGGER_TOKEN }}
         PIPELINE_VARIABLES: GITHUB2LAB_TEST=a=b c
     - name: Verify triggered pipeline
-      if: env.GITLAB_TRIGGER_TOKEN != ''
+      if: env.HAS_TRIGGER_TOKEN == 'true'
       shell: bash
       env:
+        GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
         PIPELINE_ID: ${{ steps.trigger.outputs.pipeline_id }}
         PIPELINE_SHA: ${{ steps.trigger.outputs.sha }}
       run: |
@@ -60,10 +64,12 @@ jobs:
           "https://$GITLAB_HOSTNAME/api/v4/projects/$GITLAB_PROJECT_ID/pipelines/$PIPELINE_ID/variables" |
           jq -e 'any(.[]; .key == "GITHUB2LAB_TEST" and .value == "a=b c")'
     - name: Follow triggered pipeline
-      if: env.GITLAB_TRIGGER_TOKEN != ''
+      if: env.HAS_TRIGGER_TOKEN == 'true'
       uses: ./
       env:
         MODE: get_status
+        GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         PIPELINE_ID: ${{ steps.trigger.outputs.pipeline_id }}
         CHECK_RUNS: 'true'
         CHECK_PREFIX: gitlab/${{ env.GITLAB_PROJECT_ID }}/${{ steps.trigger.outputs.pipeline_id }}/
@@ -71,15 +77,16 @@ jobs:
         SUMMARY: 'true'
         LOG_TRACES: 'false'
     - name: Collect triggered artifacts
-      if: env.GITLAB_TRIGGER_TOKEN != ''
+      if: env.HAS_TRIGGER_TOKEN == 'true'
       uses: ./
       env:
         MODE: get_artifact
+        GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
         PIPELINE_ID: ${{ steps.trigger.outputs.pipeline_id }}
         ARTIFACT_STAGES: test
         ARTIFACT_DIR: artifacts/triggered
         EXTRACT_ARTIFACTS: 'true'
         UPLOAD_ARTIFACTS: 'false'
     - name: Verify extracted artifact
-      if: env.GITLAB_TRIGGER_TOKEN != ''
+      if: env.HAS_TRIGGER_TOKEN == 'true'
       run: test -s artifacts/triggered/artifact_text.txt

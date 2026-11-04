@@ -10,7 +10,7 @@ include:
 
 Testing params without artifact:
   stage: test
-  image: alpine:latest
+  image: alpine:3.24.3
   script:
     - echo "Hello World"
     - echo "$CI_COMMIT_SHA"
@@ -19,7 +19,7 @@ Testing params without artifact:
 
 Testing params to artifact:
   stage: test
-  image: alpine:latest
+  image: alpine:3.24.3
   script:
     - echo "Hello World" | tee -a artifact_text.txt
     - echo "Current date is" | tee -a artifact_text.txt
