@@ -56,14 +56,14 @@ Steps to be done:
 ### Preparation
 
 - Create a new empty repository in a GitLab-Instance.
-- Allow Force-Push on remote protected branches in remote repository.
-  - This can be found in GitLab in
-    `Settings -> Repository -> Protected branches`
+- Ensure the access token can push to the mirrored branches.
+  If branch protection applies, configure its rules to permit pushes and force pushes by the token's identity.
 - Create an Access Token in GitLab,
   so that the GitHub-CI can push to GitLab.
   The Access Token can be a Project Access Token or a Personal Access Token.
-  If Jacamar is used, a Personal Access Token is needed.
-  Otherwise, a Project Access Token is recommended.
+  If Jacamar authorization maps pipeline users to local cluster accounts, use a Personal Access Token.
+  If this is not needed, a Project Access Token is enough.
+  With `MIRROR_ONLY=true` and `MODE: trigger`, the trigger token's owner determines the pipeline identity.
   
   Creation of a Personal Access Token:
   - This can be found in GitLab after clicking on the own user-avatar:
@@ -291,7 +291,8 @@ by the Parallel-in-Time community.
 
 ## Triggering a pipeline
 
-Create a GitLab pipeline trigger token and store it as `GITLAB_TRIGGER_TOKEN`.
+Create a pipeline trigger token in GitLab Settings, CI/CD, Pipeline trigger tokens and store it as the GitHub repository secret `GITLAB_TRIGGER_TOKEN`.
+Its owner must be allowed to start the selected branch and supply pipeline variables.
 `MODE: trigger` starts a pipeline on `PIPELINE_REF` or the event's derived ref.
 Pass pipeline variables as one `KEY=VALUE` per line in `PIPELINE_VARIABLES`.
 The action returns `pipeline_id`, `web_url` and `sha`.
@@ -375,6 +376,7 @@ In the GitHub fork's Settings, Secrets and variables, Actions, configure these r
 
 Set both variables for your own test project, leaving both unset uses the upstream destination.
 Use the GitLab hostname without a protocol prefix and the numeric project ID.
+Copy the project ID from the GitLab project's main page.
 Configure `GITLAB_TOKEN` as described in [Preparation](#preparation) and `GITLAB_TRIGGER_TOKEN` as described in [Triggering a pipeline](#triggering-a-pipeline).
 Without the trigger token, only the legacy integration path runs.
 Push a reviewed branch or run the workflow manually to verify mirroring, pipeline variables, job checks and artifact collection.
