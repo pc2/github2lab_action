@@ -359,6 +359,26 @@ Archive filenames flatten job name path separators and destinations must remain 
 The [long pipeline example](examples/.github/workflows/trigger_long_running.yml) demonstrates triggering, bounded polling and artifact collection.
 Production callers must preserve and validate pipeline identity across continuation runs.
 
+## Standalone integration testing
+
+Create a dedicated GitLab project, the [integration workflow](.github/workflows/mirror_wait.yml) pushes this repository and runs its [GitLab jobs](.gitlab-ci.yml).
+Enable a runner in that project.
+For a tagged runner, set `TEST_RUNNER_TAG` in the GitLab project's Settings, CI/CD, Variables to an existing runner tag.
+The test jobs require `echo`, `date` and `tee` in their execution environment.
+
+In the GitHub fork's Settings, Secrets and variables, Actions, configure these repository variables.
+
+| Variable | Default |
+|---|---|
+| `GITLAB_HOSTNAME` | `codebase.helmholtz.cloud` |
+| `GITLAB_PROJECT_ID` | `6627` |
+
+Set both variables for your own test project, leaving both unset uses the upstream destination.
+Use the GitLab hostname without a protocol prefix and the numeric project ID.
+Configure `GITLAB_TOKEN` as described in [Preparation](#preparation) and `GITLAB_TRIGGER_TOKEN` as described in [Triggering a pipeline](#triggering-a-pipeline).
+Without the trigger token, only the legacy integration path runs.
+Push a reviewed branch or run the workflow manually to verify mirroring, pipeline variables, job checks and artifact collection.
+
 ## Troubleshoot
 
 ### Action failing unexpectedly

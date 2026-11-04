@@ -1,6 +1,12 @@
 # SPDX-FileCopyrightText: 2022 Jakob Fritz <j.fritz@fz-juelich.de>
+# SPDX-FileCopyrightText: 2026 Gerrit Pape <gerrit.pape@uni-paderborn.de>
 #
 # SPDX-License-Identifier: MIT
+
+include:
+  - local: etc/gitlab-runner-tags.yml
+    rules:
+      - if: $TEST_RUNNER_TAG
 
 Testing params without artifact:
   stage: test

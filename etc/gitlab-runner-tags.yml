@@ -1,0 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Gerrit Pape <gerrit.pape@uni-paderborn.de>
+#
+# SPDX-License-Identifier: MIT
+
+default:
+  tags:
+    - $TEST_RUNNER_TAG
