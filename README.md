@@ -350,9 +350,18 @@ The pipeline's commit receives results unless `TARGET_SHA` overrides it.
 Callers must validate source identity before reporting on another commit.
 `MAX_WAIT_MINUTES` limits polling without cancelling the pipeline.
 At the deadline, the action returns `finished=false`.
+Resource waits, callbacks, manual approval and scheduled starts keep polling.
+Cancellation remains active until GitLab reports a terminal state.
+Only terminal [pipeline states][pipeline-states] return `finished=true`.
+These are `success`, `failed`, `canceled` and `skipped`.
+Invalid pipeline responses fail without reporting completion.
+Blocking manual jobs have queued checks.
+Optional manual jobs have skipped checks.
 Continue with the same `PIPELINE_ID`, preserving the original source identity.
 Outputs are `pipeline_id`, `web_url`, `sha`, `status` and `finished`.
 Failed pipelines return a failing exit status.
+
+[pipeline-states]: https://docs.gitlab.com/api/pipelines/
 
 | Variable | Meaning |
 | --- | --- |

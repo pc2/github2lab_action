@@ -30,7 +30,22 @@ output() {
 }
 
 gitlab() {
-  curl --header "PRIVATE-TOKEN: $GITLAB_TOKEN" --silent "$API/$1"
+  curl --fail --silent --show-error --retry 3 --max-time 60 \
+    --header "PRIVATE-TOKEN: $GITLAB_TOKEN" "$API/$1"
+}
+
+pipeline_status() {
+  printf '%s' "$1" | jq -er '.status | select(IN(
+    "created", "waiting_for_resource", "preparing", "waiting_for_callback",
+    "pending", "running", "manual", "scheduled", "canceling",
+    "success", "failed", "canceled", "skipped"))'
+}
+
+pipeline_finished() {
+  case $1 in
+    success | failed | canceled | skipped) return 0 ;;
+    *) return 1 ;;
+  esac
 }
 
 # github <method> <path> [json body]
@@ -63,7 +78,7 @@ check_fields() {
     success) echo '{"status": "completed", "conclusion": "success"}' ;;
     failed) echo '{"status": "completed", "conclusion": "failure"}' ;;
     canceled) echo '{"status": "completed", "conclusion": "cancelled"}' ;;
-    skipped | manual) echo '{"status": "completed", "conclusion": "skipped"}' ;;
+    skipped) echo '{"status": "completed", "conclusion": "skipped"}' ;;
     running) echo '{"status": "in_progress"}' ;;
     *) echo '{"status": "queued"}' ;;
   esac
@@ -101,6 +116,10 @@ checks_sync() {
     [ -n "$job" ] || continue
     name="${CHECK_PREFIX}$(printf '%s' "$job" | jq -r .name)"
     state=$(printf '%s' "$job" | jq -r .status)
+    if [ "$state" = "manual" ] &&
+      [ "$(printf '%s' "$job" | jq -r .allow_failure)" = "true" ]; then
+      state=skipped
+    fi
     if [ "$(jq -r --arg name "$name" '.[$name].state // empty' "$check_state")" = "$state" ]; then
       continue
     fi
@@ -161,9 +180,8 @@ else
   done
 fi
 
-ci_output=$(gitlab "pipelines/${pipeline_id}")
-ci_status=$(printf '%s' "$ci_output" | jq -r '.status // empty')
-if [ -z "$ci_status" ]; then
+if ! ci_output=$(gitlab "pipelines/${pipeline_id}") ||
+  ! ci_status=$(pipeline_status "$ci_output"); then
   echo "Failed to read pipeline ${pipeline_id}: ${ci_output}"
   exit 1
 fi
@@ -193,14 +211,17 @@ fi
 
 ci_status="pending"
 
-# Repeat until the pipeline is neither pending nor running
-until [ "$ci_status" != "created" ] && [ "$ci_status" != "preparing" ] && [ "$ci_status" != "pending" ] && [ "$ci_status" != "running" ]
+# Only terminal pipeline states permit result collection.
+until pipeline_finished "$ci_status"
 do
   # Wait some seconds
    sleep "$POLL_TIMEOUT"
    # Get the current state of the pipeline and the url of the website
-   ci_output=$(gitlab "pipelines/${pipeline_id}")
-   ci_status=$(printf '%s' "$ci_output" | jq -r .status)
+   if ! ci_output=$(gitlab "pipelines/${pipeline_id}") ||
+     ! ci_status=$(pipeline_status "$ci_output"); then
+     echo "Failed to read pipeline ${pipeline_id}: ${ci_output}"
+     exit 1
+   fi
 
    echo "Current pipeline status: ${ci_status}"
    if [ "$CHECK_RUNS" = "true" ]; then
@@ -213,15 +234,12 @@ do
      echo "Checking pipeline status..."
      set_status pending
    fi
-   if [ "$deadline" -gt 0 ] && [ "$(date +%s)" -ge "$deadline" ]; then
-     case $ci_status in
-       created | preparing | pending | running)
-         echo "Pipeline still ${ci_status} after ${MAX_WAIT_MINUTES} minutes, stopping to wait."
-         output finished false
-         output status "$ci_status"
-         exit 0
-         ;;
-     esac
+   if [ "$deadline" -gt 0 ] && [ "$(date +%s)" -ge "$deadline" ] &&
+     ! pipeline_finished "$ci_status"; then
+     echo "Pipeline still ${ci_status} after ${MAX_WAIT_MINUTES} minutes, stopping to wait."
+     output finished false
+     output status "$ci_status"
+     exit 0
    fi
 done
 # Pipeline is done

@@ -8,6 +8,8 @@ SPDX-License-Identifier: CC0-1.0
 
 ## Unreleased
 
+- Polling preserves waiting pipelines and rejects invalid pipeline responses.
+- Blocking manual checks remain queued, optional manual checks are skipped.
 - Pipeline trigger tokens support variables, mirror waiting and identity outputs, mirroring supports selected commits without automatic pipelines.
 - Explicit pipelines support bounded polling, job checks, summaries and reporting controls.
 - Artifact collection supports pipeline and stage selection, extraction and configurable upload, archive destinations stay inside the download directory.
