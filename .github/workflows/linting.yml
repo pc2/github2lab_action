@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions: {}
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
     - name: Lint markdown file
       uses: avto-dev/markdown-lint@v1
       with:
@@ -20,14 +20,14 @@ jobs:
     runs-on: ubuntu-latest
     permissions: {}
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
     - name: Run shellcheck
       uses: ludeeus/action-shellcheck@6d3f514f44620b9d4488e380339edc0d9bbe2fba
   CheckBashisms:
     runs-on: ubuntu-latest
     container: alpine:3.17
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
     - name: Install checkbashisms
       run: 
         apk add checkbashisms=2.22.2-r0
@@ -38,7 +38,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions: {}
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
     - name: Install dependencies using micromamba
       uses: mamba-org/setup-micromamba@v1
       with:

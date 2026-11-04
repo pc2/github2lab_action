@@ -26,7 +26,7 @@ jobs:
       run: |
         echo '::error::Set both GITLAB_HOSTNAME and GITLAB_PROJECT_ID repository variables.'
         exit 1
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
     - name: Mirror
       uses: ./
       env:
