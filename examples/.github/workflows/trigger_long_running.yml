@@ -1,0 +1,104 @@
+# SPDX-FileCopyrightText: 2026 Gerrit Pape <gerrit.pape@uni-paderborn.de>
+#
+# SPDX-License-Identifier: MIT
+
+# The workflow resumes monitoring the same pipeline when its polling deadline expires.
+
+name: Long GitLab pipeline
+
+on:
+  workflow_dispatch:
+    inputs:
+      suite:
+        description: Value passed to the pipeline as SUITE
+        type: string
+        default: long
+      pipeline_id:
+        description: Attach to a running pipeline instead of starting one
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+  actions: write
+  checks: write
+  statuses: write
+
+env:
+  GITLAB_HOSTNAME: "codebase.helmholtz.cloud"
+  GITLAB_PROJECT_ID: "6627"
+
+jobs:
+  start:
+    if: ${{ !inputs.pipeline_id }}
+    runs-on: ubuntu-latest
+    outputs:
+      pipeline_id: ${{ steps.start.outputs.pipeline_id }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Push to GitLab
+        uses: jakob-fritz/github2lab_action@main
+        env:
+          MODE: 'mirror'
+          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+          MIRROR_SHA: ${{ github.sha }}
+          MIRROR_BRANCH: ${{ github.ref_name }}
+          MIRROR_ONLY: 'true'
+          FORCE_PUSH: "true"
+      - name: Start the pipeline
+        id: start
+        uses: jakob-fritz/github2lab_action@main
+        env:
+          MODE: 'trigger'
+          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+          GITLAB_TRIGGER_TOKEN: ${{ secrets.GITLAB_TRIGGER_TOKEN }}
+          PIPELINE_VARIABLES: |
+            SUITE=${{ inputs.suite }}
+
+  wait:
+    needs: start
+    if: ${{ !cancelled() && (needs.start.result == 'success' || inputs.pipeline_id) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 345
+    outputs:
+      finished: ${{ steps.wait.outputs.finished }}
+      pipeline_id: ${{ steps.wait.outputs.pipeline_id }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Wait for the pipeline
+        id: wait
+        uses: jakob-fritz/github2lab_action@main
+        env:
+          MODE: 'get_status'
+          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PIPELINE_ID: ${{ inputs.pipeline_id || needs.start.outputs.pipeline_id }}
+          POLL_TIMEOUT: "120"
+          MAX_WAIT_MINUTES: "330"
+          CHECK_RUNS: "true"
+          CHECK_PREFIX: gitlab/${{ env.GITLAB_PROJECT_ID }}/${{ inputs.pipeline_id || needs.start.outputs.pipeline_id }}/
+          SUMMARY: "true"
+          LOG_TRACES: "false"
+      - name: Hand over to a new run
+        if: steps.wait.outputs.finished == 'false'
+        run: gh workflow run "${{ github.workflow }}" --ref "$GITHUB_REF_NAME" -f suite="$SUITE" -f pipeline_id="$PIPELINE_ID"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SUITE: ${{ inputs.suite }}
+          PIPELINE_ID: ${{ steps.wait.outputs.pipeline_id }}
+
+  artifacts:
+    needs: wait
+    if: ${{ !cancelled() && needs.wait.outputs.finished == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Get the artifacts of the test stage
+        uses: jakob-fritz/github2lab_action@main
+        env:
+          MODE: 'get_artifact'
+          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+          PIPELINE_ID: ${{ needs.wait.outputs.pipeline_id }}
+          ARTIFACT_STAGES: test

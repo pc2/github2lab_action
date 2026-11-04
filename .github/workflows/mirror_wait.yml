@@ -65,3 +65,16 @@ jobs:
         SET_STATUS: 'false'
         SUMMARY: 'true'
         LOG_TRACES: 'false'
+    - name: Collect triggered artifacts
+      if: env.GITLAB_TRIGGER_TOKEN != ''
+      uses: ./
+      env:
+        MODE: get_artifact
+        PIPELINE_ID: ${{ steps.trigger.outputs.pipeline_id }}
+        ARTIFACT_STAGES: test
+        ARTIFACT_DIR: artifacts/triggered
+        EXTRACT_ARTIFACTS: 'true'
+        UPLOAD_ARTIFACTS: 'false'
+    - name: Verify extracted artifact
+      if: env.GITLAB_TRIGGER_TOKEN != ''
+      run: test -s artifacts/triggered/artifact_text.txt

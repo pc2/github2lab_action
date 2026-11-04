@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 # SPDX-FileCopyrightText: 2023 Jakob Fritz <j.fritz@fz-juelich.de>
+# SPDX-FileCopyrightText: 2026 Gerrit Pape <gerrit.pape@uni-paderborn.de>
 #
 # SPDX-License-Identifier: MIT
 
@@ -11,10 +12,15 @@ It is designed to be called from within Github-Actions
 and uses environment-variables as input.
 """
 
-from os import environ as env
+import io
 import os
 import subprocess
+import zipfile
+from os import environ as env
+
 import requests
+
+ARTIFACT_DIR = os.getenv("ARTIFACT_DIR") or "artifacts"
 
 
 def get_job_list():
@@ -29,13 +35,21 @@ def get_job_list():
     GITLAB_TOKEN: A secret token to access gitlab with more rights
     GITHUB_SHA: The SHA of the last commit that was pushed
     PR_HEAD_SHA: The SHA of the latest commit in a Pull Request
+    PIPELINE_ID: Optional, takes this pipeline instead of the commit's last one
+    ARTIFACT_STAGES: Optional, space separated stages whose jobs are kept
     """
+    headers = {"PRIVATE-TOKEN": env["GITLAB_TOKEN"]}
+    pipeline_id = os.getenv("PIPELINE_ID")
+    if pipeline_id:
+        print(f"Pipeline-ID is {pipeline_id}")
+        return filter_stages(get_jobs(pipeline_id, headers))
     if os.getenv("MIRROR_BRANCH") not in [None, ""]:
         print(f"Used branch is: {os.getenv('MIRROR_BRANCH')}")
         used_sha = subprocess.run(
             ["git", "rev-parse", f"{os.getenv('MIRROR_BRANCH')}"],
             capture_output=True,
             text=True,
+            check=False,
         ).stdout
         # strip whitespaces (incl. newlines)
         used_sha = used_sha.strip()
@@ -47,22 +61,36 @@ def get_job_list():
         f"https://{env['GITLAB_HOSTNAME']}/api/v4/projects/"
         + f"{env['GITLAB_PROJECT_ID']}/repository/commits/{used_sha}"
     )
-    headers = {"PRIVATE-TOKEN": env["GITLAB_TOKEN"]}
     # Get the pipeline for the commit
     response = requests.get(pipeline_url, headers=headers)
     # Raise an error if the request was not successfull
     response.raise_for_status()
     pipeline_id = response.json()["last_pipeline"]["id"]
     print(f"Pipeline-ID is {pipeline_id}")
+    return filter_stages(get_jobs(pipeline_id, headers))
+
+
+def get_jobs(pipeline_id, headers):
+    """
+    Returns all jobs of a pipeline, up to 100.
+    """
     jobs_url = (
         f"https://{env['GITLAB_HOSTNAME']}/api/v4/projects/"
-        + f"{env['GITLAB_PROJECT_ID']}/pipelines/{pipeline_id}/jobs"
+        + f"{env['GITLAB_PROJECT_ID']}/pipelines/{pipeline_id}/jobs?per_page=100"
     )
-    # Get the list of jobs for the pipeline-id (determined above)
     response = requests.get(jobs_url, headers=headers)
     response.raise_for_status()
-    job_list = response.json()
-    return job_list
+    return response.json()
+
+
+def filter_stages(job_list):
+    """
+    Keeps the jobs of the stages in ARTIFACT_STAGES, or all jobs if it is unset.
+    """
+    stages = (os.getenv("ARTIFACT_STAGES") or "").split()
+    if not stages:
+        return job_list
+    return [job for job in job_list if job["stage"] in stages]
 
 
 def download_artifacts(job_list):
@@ -72,10 +100,10 @@ def download_artifacts(job_list):
     It takes only the list of jobs and returns nothing
     """
     # Create directory to store artifacts in
-    os.makedirs("artifacts")
+    os.makedirs(ARTIFACT_DIR, exist_ok=True)
     for job in job_list:
         # If a job has an artifact (apart from the log), download it
-        if any([e["file_type"] == "archive" for e in job["artifacts"]]):
+        if any(e["file_type"] == "archive" for e in job["artifacts"]):
             download_single_artifact(job)
         else:
             print(
@@ -110,16 +138,25 @@ def download_single_artifact(job):
     artifact = get_artifact_info(job)
     job_id = job["id"]
     job_name = sanitize(job["name"])
+    artifact_root = os.path.realpath(ARTIFACT_DIR)
+    artifact_path = os.path.join(artifact_root, f"{job_name}.{artifact['file_format']}")
+    if os.path.dirname(os.path.realpath(artifact_path)) != artifact_root:
+        raise ValueError("Artifact destination must stay inside ARTIFACT_DIR.")
     headers = {"PRIVATE-TOKEN": env["GITLAB_TOKEN"]}
     file_url = (
         f"https://{env['GITLAB_HOSTNAME']}/api/v4/projects/"
         + f"{env['GITLAB_PROJECT_ID']}/jobs/{job_id}/artifacts"
     )
-    with open(f"artifacts/{job_name}.{artifact['file_format']}", "wb") as file:
-        # Get the file (artifact)
-        response = requests.get(file_url, headers=headers)
-        # Raise an error if the request was unsuccessfull
-        response.raise_for_status()
+    # Get the file (artifact)
+    response = requests.get(file_url, headers=headers)
+    # Raise an error if the request was unsuccessfull
+    response.raise_for_status()
+    if os.getenv("EXTRACT_ARTIFACTS") == "true":
+        with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
+            archive.extractall(ARTIFACT_DIR)
+        print(f"Extracted artifacts of job: {job['name']} into {ARTIFACT_DIR}.")
+        return
+    with open(artifact_path, "wb") as file:
         # Acutally write the content of the response to a file
         file.write(response.content)
     print(f"Downloaded file from job: {job['name']} as {job_name}.")
@@ -140,6 +177,8 @@ def sanitize(job_name):
     sanitized_name = sanitized_name.replace("\n", "")
     # Officially not needed, but probably helpfull to exclude spaces
     sanitized_name = sanitized_name.replace(" ", "_")
+    sanitized_name = sanitized_name.replace("/", "_")
+    sanitized_name = sanitized_name.replace("\\", "_")
     return sanitized_name
 
 

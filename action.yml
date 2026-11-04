@@ -58,4 +58,4 @@ runs:
     - uses: actions/upload-artifact@v4
       with:
         path: ./artifacts/
-      if: (env.MODE == 'get_artifact') || (env.MODE == 'both') || (env.MODE == 'all')
+      if: ((env.MODE == 'get_artifact') || (env.MODE == 'both') || (env.MODE == 'all')) && (env.UPLOAD_ARTIFACTS != 'false')

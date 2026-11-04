@@ -347,6 +347,18 @@ Check reporting requires `checks: write`, legacy commit statuses require `status
 Use a `CHECK_PREFIX` containing the project and pipeline IDs to isolate concurrent runs on the same commit.
 Job lists include up to one hundred jobs.
 
+## Collecting pipeline artifacts
+
+`MODE: get_artifact` accepts `PIPELINE_ID` to collect the exact monitored pipeline.
+With `ARTIFACT_STAGES`, only jobs in the listed stages are collected.
+`ARTIFACT_DIR` selects the download directory, defaulting to `artifacts`.
+Set `EXTRACT_ARTIFACTS=true` to unpack archives and `UPLOAD_ARTIFACTS=false` to manage GitHub upload separately.
+Downloads can reuse an existing directory, HTTP failures do not create empty archives.
+Archive filenames flatten job name path separators and destinations must remain inside the download directory.
+
+The [long pipeline example](examples/.github/workflows/trigger_long_running.yml) demonstrates triggering, bounded polling and artifact collection.
+Production callers must preserve and validate pipeline identity across continuation runs.
+
 ## Troubleshoot
 
 ### Action failing unexpectedly
