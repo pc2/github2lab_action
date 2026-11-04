@@ -68,9 +68,6 @@ git status
 echo "Pushing to new gitlab remote"
 # Push the current state of the repo to GitLab
 set --
-if [ "${MIRROR_ONLY:-false}" = "true" ]; then
-  set -- "$@" -o ci.skip
-fi
 if [ "${FORCE_PUSH:-}" = "true" ]; then
   set -- "$@" --force
 fi

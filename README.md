@@ -64,7 +64,8 @@ Steps to be done:
   The Access Token can be a Project Access Token or a Personal Access Token.
   Use a Personal Access Token when Jacamar maps users to cluster accounts.
   If this is not needed, a Project Access Token is enough.
-  With `MIRROR_ONLY=true`, push mirroring does not start pipelines.
+  Set `MIRROR_ONLY=true` when starting pipelines in a separate trigger step.
+  GitLab workflow rules control pipelines started by pushes.
   With `MODE: trigger`, the trigger token's owner is the pipeline user.
   
   Creation of a Personal Access Token:
@@ -312,11 +313,17 @@ Credentialed integration runs on repository pushes and manual dispatch.
 PR event checks remain secret free.
 
 For push mirroring, check out the source repository and call `MODE: mirror`.
-Call `MODE: trigger` afterward.
 Set `MIRROR_SHA` to push an exact local commit without changing the checkout.
 Set `MIRROR_BRANCH` to select a branch, it defaults to the event branch.
-Use `MIRROR_ONLY=true` to skip push pipelines and unchanged branch triggers.
-Both settings are optional, existing mirroring behavior is the default.
+Both settings are optional.
+
+By default, mirroring starts a pipeline if GitLab already has the commit.
+This supports reruns and scheduled tests without new commits.
+Set `MIRROR_ONLY=true` to stop after pushing, even when nothing changed.
+Use this when a separate `MODE: trigger` step starts the pipeline.
+GitLab workflow rules still determine whether a push starts a pipeline.
+Mirroring does not add the `ci.skip` push option.
+Use `workflow: rules` in `.gitlab-ci.yml` to reject push pipelines when needed.
 `FORCE_PUSH` remains opt in.
 `MIRROR_ONLY=true` needs `read_api` and `write_repository` scopes.
 The token must be allowed to update the target branch.
