@@ -1,56 +1,55 @@
 # SPDX-FileCopyrightText: 2022 Jakob Fritz <j.fritz@fz-juelich.de>
+# SPDX-FileCopyrightText: 2026 Gerrit Pape <gerrit.pape@uni-paderborn.de>
 #
 # SPDX-License-Identifier: MIT
 
 name: Mirror and run GitLab CI
 
-on: [push, pull_request_target]
+on: [push, workflow_dispatch]
 
 jobs:
   github2lab:
     runs-on: ubuntu-latest
     permissions:
+      contents: read
       statuses: write
+    env:
+      GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+      GITLAB_TRIGGER_TOKEN: ${{ secrets.GITLAB_TRIGGER_TOKEN }}
+      GITLAB_HOSTNAME: "codebase.helmholtz.cloud"
+      GITLAB_PROJECT_ID: "6627"
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
     - uses: actions/checkout@v4
     - name: Mirror
       uses: ./
       env:
         MODE: 'mirror'
-        GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
         FORCE_PUSH: "true"
-        GITLAB_HOSTNAME: "codebase.helmholtz.cloud"
-        GITLAB_PROJECT_ID: "6627"
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     - name: Get-CI-State
       uses: ./
       env:
         MODE: 'get_status'
-        GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
         FORCE_PUSH: "true"
-        GITLAB_HOSTNAME: "codebase.helmholtz.cloud"
-        GITLAB_PROJECT_ID: "6627"
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     - name: Get-Artifacts
       uses: ./
       env:
         MODE: 'get_artifact'
-        GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
-        GITLAB_HOSTNAME: "codebase.helmholtz.cloud"
-        GITLAB_PROJECT_ID: "6627"
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    # - name: Mirror and get status
-    #   uses: ./
-    #   env:
-    #     MODE: 'both'
-    #     GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
-    #     FORCE_PUSH: "true"
-    #     PRUNE: "true"
-    #     GITLAB_HOSTNAME: "codebase.helmholtz.cloud"
-    #     GITLAB_PROJECT_ID: "6627"
-    #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    # - name: Send incorrect mode
-    #   uses: ./
-    #   env:
-    #     MODE: "other"    
-
+    - name: Trigger with variables
+      id: trigger
+      if: env.GITLAB_TRIGGER_TOKEN != ''
+      uses: ./
+      env:
+        MODE: trigger
+        PIPELINE_VARIABLES: GITHUB2LAB_TEST=a=b c
+    - name: Verify triggered pipeline
+      if: env.GITLAB_TRIGGER_TOKEN != ''
+      shell: bash
+      env:
+        PIPELINE_ID: ${{ steps.trigger.outputs.pipeline_id }}
+        PIPELINE_SHA: ${{ steps.trigger.outputs.sha }}
+      run: |
+        test "$PIPELINE_SHA" = "$(git rev-parse HEAD)"
+        curl --fail --silent --show-error --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
+          "https://$GITLAB_HOSTNAME/api/v4/projects/$GITLAB_PROJECT_ID/pipelines/$PIPELINE_ID/variables" |
+          jq -e 'any(.[]; .key == "GITHUB2LAB_TEST" and .value == "a=b c")'

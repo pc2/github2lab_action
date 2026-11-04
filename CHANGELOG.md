@@ -6,6 +6,10 @@ SPDX-License-Identifier: CC0-1.0
 
 # Changelog
 
+## Unreleased
+
+- Pipeline trigger tokens support variables, mirror waiting and identity outputs, mirroring supports selected commits without automatic pipelines.
+
 ## 0.9
 
 - Removed `-e` flag when executing shell-scripts, as this leads to

@@ -289,6 +289,40 @@ A workflow similar to the one described above can be found in the project
 [pySDC](<https://github.com/Parallel-in-Time/pySDC>)
 by the Parallel-in-Time community.
 
+## Triggering a pipeline
+
+Create a GitLab pipeline trigger token and store it as `GITLAB_TRIGGER_TOKEN`.
+`MODE: trigger` starts a pipeline on `PIPELINE_REF` or the event's derived ref.
+Pass pipeline variables as one `KEY=VALUE` per line in `PIPELINE_VARIABLES`.
+The action returns `pipeline_id`, `web_url` and `sha`.
+The [integration workflow](.github/workflows/mirror_wait.yml) exercises the trigger interfaces when `GITLAB_TRIGGER_TOKEN` is configured.
+Credentialed integration runs on repository pushes and manual dispatch, PR event checks remain secret free.
+
+For push mirroring, check out the source repository and call `MODE: mirror` before triggering.
+Set `MIRROR_SHA` to push that exact local commit to `MIRROR_BRANCH`, defaulting to the event branch, without fetching or changing the checkout.
+Set `MIRROR_ONLY=true` to skip push pipelines and the automatic trigger for an unchanged branch.
+Both settings are optional, existing mirroring behavior remains the default and `FORCE_PUSH` remains opt in.
+Mirroring only requires `read_api` and `write_repository` scopes and permission to update the target branch.
+The temporary GitLab remote is removed when mirroring finishes.
+
+```yaml
+- name: Start GitLab pipeline
+  id: start
+  uses: jakob-fritz/github2lab_action@main
+  env:
+    MODE: trigger
+    GITLAB_HOSTNAME: gitlab.example.org
+    GITLAB_PROJECT_ID: '123'
+    GITLAB_TRIGGER_TOKEN: ${{ secrets.GITLAB_TRIGGER_TOKEN }}
+    PIPELINE_REF: main
+    PIPELINE_VARIABLES: |
+      SUITE=cpu
+```
+
+With pull mirroring, set `MIRROR_WAIT_MINUTES` and provide `GITLAB_TOKEN` with `read_api` access.
+The action waits for `MIRROR_WAIT_SHA`, defaulting to `GITHUB_SHA`, before triggering.
+Waiting for the commit to exist does not pin the branch head, callers must validate the returned pipeline SHA.
+
 ## Troubleshoot
 
 ### Action failing unexpectedly

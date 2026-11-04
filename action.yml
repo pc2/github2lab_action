@@ -5,14 +5,24 @@
 name: 'Github2lab'
 author: 'Jakob Fritz'
 description: 'Mirroring a repo to gitlab to use the gitlab-ci'
+outputs:
+  pipeline_id:
+    description: 'The triggered pipeline ID.'
+    value: ${{ steps.trigger.outputs.pipeline_id }}
+  web_url:
+    description: 'The triggered pipeline URL.'
+    value: ${{ steps.trigger.outputs.web_url }}
+  sha:
+    description: 'The triggered pipeline commit.'
+    value: ${{ steps.trigger.outputs.sha }}
 runs:
   using: "composite"
   steps:
     - run: |
-        echo "Mode is unknown. It must be 'mirror', 'get_status', 'get_artifact', or 'all'. Not '$MODE'"
+        echo "Mode is unknown. It must be 'mirror', 'trigger', 'get_status', 'get_artifact', or 'all'. Not '$MODE'"
         exit 1
       shell: bash
-      if:  (env.MODE != 'mirror') && (env.MODE != 'get_status') && (env.MODE != 'both') && (env.MODE != 'all') && (env.MODE != 'get_artifact')
+      if:  (env.MODE != 'mirror') && (env.MODE != 'trigger') && (env.MODE != 'get_status') && (env.MODE != 'both') && (env.MODE != 'all') && (env.MODE != 'get_artifact')
     - run: echo "${{ github.action_path }}" >> $GITHUB_PATH
       shell: bash
     - run: mirror.sh
@@ -21,6 +31,12 @@ runs:
         PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
       shell: bash
       if: (env.MODE == 'mirror') || (env.MODE == 'both') || (env.MODE == 'all')
+    - run: trigger.sh
+      id: trigger
+      env:
+        PR_NUMBER: ${{ github.event.number }}
+      shell: bash
+      if: env.MODE == 'trigger'
     - run: get_ci_state.sh
       env:
         PR_NUMBER: ${{ github.event.number }}
