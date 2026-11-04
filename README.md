@@ -323,6 +323,30 @@ With pull mirroring, set `MIRROR_WAIT_MINUTES` and provide `GITLAB_TOKEN` with `
 The action waits for `MIRROR_WAIT_SHA`, defaulting to `GITHUB_SHA`, before triggering.
 Waiting for the commit to exist does not pin the branch head, callers must validate the returned pipeline SHA.
 
+## Following an explicit pipeline
+
+Set `MODE: get_status` and `PIPELINE_ID` to follow a specific pipeline instead of the commit's latest pipeline.
+The pipeline's commit receives results unless `TARGET_SHA` overrides it.
+Callers must validate the requested source identity before reporting on another commit.
+`MAX_WAIT_MINUTES` limits polling, the action returns `finished=false` when the deadline expires without cancelling the pipeline.
+Continue with the same `PIPELINE_ID`, preserving the original source identity.
+Outputs are `pipeline_id`, `web_url`, `sha`, `status` and `finished`, failed pipelines return a failing exit status.
+
+| Variable | Meaning |
+|---|---|
+| `POLL_TIMEOUT` | Seconds between polls, defaulting to ten. |
+| `MAX_WAIT_MINUTES` | The optional polling deadline. |
+| `CHECK_RUNS` | Set `true` for a check per job and a pipeline summary check. |
+| `CHECK_PREFIX` | The check name prefix, defaulting to `gitlab/`. |
+| `SUMMARY` | Set `true` to append the job table to the workflow summary. |
+| `LOG_TRACES` | Set `false` to omit job traces from the workflow log. |
+| `SET_STATUS` | Set `false` to disable legacy commit statuses. |
+| `STATUS_CONTEXT` | The legacy commit status context, defaulting to `gitlab-ci`. |
+
+Check reporting requires `checks: write`, legacy commit statuses require `statuses: write`.
+Use a `CHECK_PREFIX` containing the project and pipeline IDs to isolate concurrent runs on the same commit.
+Job lists include up to one hundred jobs.
+
 ## Troubleshoot
 
 ### Action failing unexpectedly

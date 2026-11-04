@@ -9,6 +9,7 @@ SPDX-License-Identifier: CC0-1.0
 ## Unreleased
 
 - Pipeline trigger tokens support variables, mirror waiting and identity outputs, mirroring supports selected commits without automatic pipelines.
+- Explicit pipelines support bounded polling, job checks, summaries and reporting controls.
 
 ## 0.9
 

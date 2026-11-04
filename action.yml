@@ -7,14 +7,20 @@ author: 'Jakob Fritz'
 description: 'Mirroring a repo to gitlab to use the gitlab-ci'
 outputs:
   pipeline_id:
-    description: 'The triggered pipeline ID.'
-    value: ${{ steps.trigger.outputs.pipeline_id }}
+    description: 'ID of the GitLab pipeline started (trigger) or followed (get_status)'
+    value: ${{ steps.status.outputs.pipeline_id || steps.trigger.outputs.pipeline_id }}
   web_url:
-    description: 'The triggered pipeline URL.'
-    value: ${{ steps.trigger.outputs.web_url }}
+    description: 'URL of the GitLab pipeline'
+    value: ${{ steps.status.outputs.web_url || steps.trigger.outputs.web_url }}
   sha:
-    description: 'The triggered pipeline commit.'
-    value: ${{ steps.trigger.outputs.sha }}
+    description: 'Commit the statuses and check runs are reported on (get_status) or the pipeline ran on (trigger)'
+    value: ${{ steps.status.outputs.sha || steps.trigger.outputs.sha }}
+  status:
+    description: 'Status of the GitLab pipeline when get_status ended'
+    value: ${{ steps.status.outputs.status }}
+  finished:
+    description: 'Whether the pipeline finished before MAX_WAIT_MINUTES ran out (get_status)'
+    value: ${{ steps.status.outputs.finished }}
 runs:
   using: "composite"
   steps:
@@ -38,6 +44,7 @@ runs:
       shell: bash
       if: env.MODE == 'trigger'
     - run: get_ci_state.sh
+      id: status
       env:
         PR_NUMBER: ${{ github.event.number }}
         PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}

@@ -13,6 +13,7 @@ jobs:
     permissions:
       contents: read
       statuses: write
+      checks: write
     env:
       GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
       GITLAB_TRIGGER_TOKEN: ${{ secrets.GITLAB_TRIGGER_TOKEN }}
@@ -53,3 +54,14 @@ jobs:
         curl --fail --silent --show-error --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
           "https://$GITLAB_HOSTNAME/api/v4/projects/$GITLAB_PROJECT_ID/pipelines/$PIPELINE_ID/variables" |
           jq -e 'any(.[]; .key == "GITHUB2LAB_TEST" and .value == "a=b c")'
+    - name: Follow triggered pipeline
+      if: env.GITLAB_TRIGGER_TOKEN != ''
+      uses: ./
+      env:
+        MODE: get_status
+        PIPELINE_ID: ${{ steps.trigger.outputs.pipeline_id }}
+        CHECK_RUNS: 'true'
+        CHECK_PREFIX: gitlab/${{ env.GITLAB_PROJECT_ID }}/${{ steps.trigger.outputs.pipeline_id }}/
+        SET_STATUS: 'false'
+        SUMMARY: 'true'
+        LOG_TRACES: 'false'
