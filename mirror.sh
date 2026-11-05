@@ -71,9 +71,18 @@ set --
 if [ "${FORCE_PUSH:-}" = "true" ]; then
   set -- "$@" --force
 fi
-git push "$@" gitlab "$push_ref" >push_out 2>&1
-# Get the return-code of pushing
-ret_code=$?
+# Concurrent mirrors of one branch make the remote reject a push while the ref is locked, retry it.
+attempt=0
+while :; do
+  git push "$@" gitlab "$push_ref" >push_out 2>&1
+  ret_code=$?
+  attempt=$((attempt + 1))
+  if [ $ret_code = 0 ] || [ $attempt -ge 5 ] || ! grep -q "cannot lock ref" push_out; then
+    break
+  fi
+  echo "The remote branch is locked by another push, retrying."
+  sleep 5
+done
 push_out_var=$(cat push_out)
 echo "$push_out_var"
 

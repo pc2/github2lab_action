@@ -12,6 +12,7 @@ SPDX-License-Identifier: CC0-1.0
 - Blocking manual checks remain queued, optional manual checks are skipped.
 - Pipeline trigger tokens support variables, mirror waiting and identity outputs.
 - Triggering retries while GitLab does not know a freshly pushed ref yet.
+- Mirroring retries pushes rejected by a locked remote branch.
 - Mirroring can push selected commits without starting another API pipeline.
 - GitLab workflow rules control push pipelines, mirroring does not add `ci.skip`.
 - Explicit pipelines support bounded polling, job checks, summaries and reporting controls.

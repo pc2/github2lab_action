@@ -329,6 +329,7 @@ Use `workflow: rules` in `.gitlab-ci.yml` to reject push pipelines when needed.
 `MIRROR_ONLY=true` needs `read_api` and `write_repository` scopes.
 The token must be allowed to update the target branch.
 The temporary GitLab remote is removed when mirroring finishes.
+A push rejected because another push holds the branch lock is retried up to five times.
 
 ```yaml
 - name: Start GitLab pipeline
