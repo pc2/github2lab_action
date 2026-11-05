@@ -307,6 +307,7 @@ Its owner must be allowed to start the branch and supply pipeline variables.
 `MODE: trigger` starts a pipeline on `PIPELINE_REF` or the event's derived ref.
 Pass pipeline variables as one `KEY=VALUE` per line in `PIPELINE_VARIABLES`.
 The action returns `pipeline_id`, `web_url` and `sha`.
+A ref pushed moments before may be unknown to GitLab, the trigger retries for two minutes.
 The [integration workflow][integration] tests the trigger interfaces.
 These tests require `GITLAB_TRIGGER_TOKEN`.
 Credentialed integration runs on repository pushes and manual dispatch.

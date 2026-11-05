@@ -68,12 +68,22 @@ ${PIPELINE_VARIABLES:-}
 EOVARIABLES
 
 echo "Starting a pipeline on ref $ref"
-response=$(curl --silent --show-error --request POST "$@" "$API/trigger/pipeline")
-pipeline_id=$(printf '%s' "$response" | jq -r '.id // empty' 2>/dev/null)
-if [ -z "$pipeline_id" ]; then
-  echo "Starting the pipeline failed: $response"
-  exit 1
-fi
+# GitLab refreshes its branch list shortly after a push, retry while the ref is still unknown.
+deadline=$(( $(date +%s) + 120 ))
+while :; do
+  response=$(curl --silent --show-error --request POST "$@" "$API/trigger/pipeline")
+  pipeline_id=$(printf '%s' "$response" | jq -r '.id // empty' 2>/dev/null)
+  if [ -n "$pipeline_id" ]; then
+    break
+  fi
+  if ! printf '%s' "$response" | jq -e '.message.base == ["Reference not found"]' >/dev/null 2>&1 \
+    || [ "$(date +%s)" -ge "$deadline" ]; then
+    echo "Starting the pipeline failed: $response"
+    exit 1
+  fi
+  echo "GitLab does not know ref $ref yet, retrying."
+  sleep 5
+done
 
 web_url=$(printf '%s' "$response" | jq -r .web_url)
 output pipeline_id "$pipeline_id"
