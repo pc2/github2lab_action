@@ -363,8 +363,13 @@ Resource waits, callbacks, manual approval and scheduled starts keep polling.
 Cancellation remains active until GitLab reports a terminal state.
 Only terminal [pipeline states][pipeline-states] return `finished=true`.
 These are `success`, `failed`, `canceled` and `skipped`.
-Invalid pipeline responses fail without reporting completion.
+Failed or invalid pipeline reads are retried for `POLL_FAILURE_MINUTES`.
+Afterwards the action fails without reporting completion.
+An outage reaching the deadline returns `finished=false` for a handover.
 Blocking manual jobs have queued checks.
+With `STOP_ON_MANUAL=true`, a pipeline blocked by a manual job finishes.
+It returns `status=manual` and a failing exit status.
+Its blocking jobs and pipeline get checks requiring action.
 Optional manual jobs have skipped checks.
 Continue with the same `PIPELINE_ID`, preserving the original source identity.
 Outputs are `pipeline_id`, `web_url`, `sha`, `status` and `finished`.
@@ -376,6 +381,8 @@ Failed pipelines return a failing exit status.
 | --- | --- |
 | `POLL_TIMEOUT` | Seconds between polls, defaulting to ten. |
 | `MAX_WAIT_MINUTES` | The optional polling deadline. |
+| `POLL_FAILURE_MINUTES` | Minutes of failed reads before failing, default 30. |
+| `STOP_ON_MANUAL` | Set `true` to finish when a manual job blocks. |
 | `CHECK_RUNS` | Set `true` for a check per job and a pipeline summary check. |
 | `CHECK_PREFIX` | The check name prefix, defaulting to `gitlab/`. |
 | `SUMMARY` | Set `true` to append the job table to the workflow summary. |
@@ -387,7 +394,8 @@ Check reporting requires `checks: write`.
 Legacy commit statuses require `statuses: write`.
 Include the project and pipeline IDs in `CHECK_PREFIX`.
 This isolates concurrent runs on the same commit.
-Job lists include up to one hundred jobs.
+Job lists include all jobs, also those of child pipelines in the project.
+Child jobs are named `<trigger job>/<job>`.
 
 ## Collecting pipeline artifacts
 
@@ -397,8 +405,13 @@ With `ARTIFACT_STAGES`, only jobs in the listed stages are collected.
 Set `EXTRACT_ARTIFACTS=true` to unpack archives.
 Set `UPLOAD_ARTIFACTS=false` to manage GitHub upload separately.
 Downloads can reuse an existing directory.
-HTTP failures do not create empty archives.
+HTTP failures do not create empty or partial archives.
+Archives are streamed to disk.
+Transfers time out after ten minutes without data.
+Child pipeline jobs are collected as well.
+Their archives are named `<trigger job>_<job>`.
 Archive filenames replace job name path separators.
+Two jobs with the same archive name fail the collection.
 Downloads must stay inside the artifact directory.
 
 See the [long pipeline example][long-pipeline].

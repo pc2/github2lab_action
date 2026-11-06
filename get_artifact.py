@@ -12,7 +12,6 @@ It is designed to be called from within Github-Actions
 and uses environment-variables as input.
 """
 
-import io
 import os
 import subprocess
 import zipfile
@@ -70,17 +69,45 @@ def get_job_list():
     return filter_stages(get_jobs(pipeline_id, headers))
 
 
+def get_list(path, headers):
+    """
+    Returns all pages of a GitLab list endpoint below the project.
+    """
+    url = f"https://{env['GITLAB_HOSTNAME']}/api/v4/projects/{env['GITLAB_PROJECT_ID']}/{path}"
+    items = []
+    page = 1
+    while True:
+        response = requests.get(
+            url, headers=headers, params={"per_page": 100, "page": page}, timeout=60
+        )
+        response.raise_for_status()
+        chunk = response.json()
+        if not isinstance(chunk, list):
+            raise TypeError(f"Unexpected response for {path}.")
+        items += chunk
+        if len(chunk) < 100:
+            return items
+        page += 1
+
+
 def get_jobs(pipeline_id, headers):
     """
-    Returns all jobs of a pipeline, up to 100.
+    Returns all jobs of a pipeline and of its child pipelines in the same project.
+    Child jobs are named <trigger job>/<job>, so they cannot collide with jobs of the parent.
     """
-    jobs_url = (
-        f"https://{env['GITLAB_HOSTNAME']}/api/v4/projects/"
-        + f"{env['GITLAB_PROJECT_ID']}/pipelines/{pipeline_id}/jobs?per_page=100"
-    )
-    response = requests.get(jobs_url, headers=headers)
-    response.raise_for_status()
-    return response.json()
+    jobs = []
+    queue = [(pipeline_id, "")]
+    while queue:
+        current, prefix = queue.pop(0)
+        jobs += [
+            job | {"name": prefix + job["name"]}
+            for job in get_list(f"pipelines/{current}/jobs", headers)
+        ]
+        for bridge in get_list(f"pipelines/{current}/bridges", headers):
+            downstream = bridge.get("downstream_pipeline") or {}
+            if str(downstream.get("project_id")) == str(env["GITLAB_PROJECT_ID"]):
+                queue.append((downstream["id"], prefix + bridge["name"] + "/"))
+    return jobs
 
 
 def filter_stages(job_list):
@@ -147,18 +174,25 @@ def download_single_artifact(job):
         f"https://{env['GITLAB_HOSTNAME']}/api/v4/projects/"
         + f"{env['GITLAB_PROJECT_ID']}/jobs/{job_id}/artifacts"
     )
-    # Get the file (artifact)
-    response = requests.get(file_url, headers=headers)
-    # Raise an error if the request was unsuccessfull
-    response.raise_for_status()
+    if os.path.exists(artifact_path):
+        raise ValueError(f"Two jobs share the artifact name {job_name}.")
+    # Stream the archive to disk, artifacts may exceed the runner memory
+    with requests.get(
+        file_url, headers=headers, stream=True, timeout=(60, 600)
+    ) as response:
+        response.raise_for_status()
+        try:
+            with open(artifact_path, "wb") as file:
+                file.writelines(response.iter_content(chunk_size=1 << 20))
+        except BaseException:
+            os.remove(artifact_path)
+            raise
     if os.getenv("EXTRACT_ARTIFACTS") == "true":
-        with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
+        with zipfile.ZipFile(artifact_path) as archive:
             archive.extractall(ARTIFACT_DIR)
+        os.remove(artifact_path)
         print(f"Extracted artifacts of job: {job['name']} into {ARTIFACT_DIR}.")
         return
-    with open(artifact_path, "wb") as file:
-        # Acutally write the content of the response to a file
-        file.write(response.content)
     print(f"Downloaded file from job: {job['name']} as {job_name}.")
 
 

@@ -12,6 +12,8 @@ set -u
 DEFAULT_POLL_TIMEOUT=10
 POLL_TIMEOUT=${POLL_TIMEOUT:-$DEFAULT_POLL_TIMEOUT}
 MAX_WAIT_MINUTES=${MAX_WAIT_MINUTES:-0}
+POLL_FAILURE_MINUTES=${POLL_FAILURE_MINUTES:-30}
+STOP_ON_MANUAL=${STOP_ON_MANUAL:-false}
 LOG_TRACES=${LOG_TRACES:-true}
 SET_STATUS=${SET_STATUS:-true}
 STATUS_CONTEXT=${STATUS_CONTEXT:-gitlab-ci}
@@ -41,20 +43,103 @@ pipeline_status() {
     "success", "failed", "canceled", "skipped"))'
 }
 
+# A pipeline blocked by a manual job only continues after a person plays it.
+# STOP_ON_MANUAL ends the monitoring there instead of waiting.
 pipeline_finished() {
   case $1 in
     success | failed | canceled | skipped) return 0 ;;
+    manual) [ "$STOP_ON_MANUAL" = "true" ] ;;
     *) return 1 ;;
   esac
+}
+
+# Reads the pipeline into ci_output and ci_status.
+# Failed reads are retried, so a GitLab outage shorter than POLL_FAILURE_MINUTES does not end the monitoring.
+# Returns 1 when the monitoring deadline passes during an outage, so the caller can hand over.
+read_pipeline() {
+  failing_since=$(date +%s)
+  while :; do
+    if ci_output=$(gitlab "pipelines/${pipeline_id}") && read_status=$(pipeline_status "$ci_output"); then
+      ci_status=$read_status
+      return 0
+    fi
+    now=$(date +%s)
+    if [ "$deadline" -gt 0 ] && [ "$now" -ge "$deadline" ]; then
+      return 1
+    fi
+    if [ $((now - failing_since)) -ge $((POLL_FAILURE_MINUTES * 60)) ]; then
+      echo "Failed to read pipeline ${pipeline_id} for ${POLL_FAILURE_MINUTES} minutes: ${ci_output}"
+      exit 1
+    fi
+    echo "Reading pipeline ${pipeline_id} failed, retrying: ${ci_output}"
+    sleep "$POLL_TIMEOUT"
+  done
+}
+
+# gitlab_list <path> <file>: writes all pages of a GitLab list endpoint to the file as one JSON array.
+gitlab_list() {
+  list_page=1
+  : > "$2.pages"
+  while :; do
+    gitlab "$1?per_page=100&page=${list_page}" > "$2.page" &&
+      jq -e 'type == "array"' "$2.page" > /dev/null 2>&1 || return 1
+    cat "$2.page" >> "$2.pages"
+    [ "$(jq length "$2.page")" -ge 100 ] || break
+    list_page=$((list_page + 1))
+  done
+  jq -s 'add // []' "$2.pages" > "$2"
+}
+
+# pipeline_jobs <pipeline id>: prints the jobs of the pipeline and of its child pipelines in this project.
+# Child jobs are named <trigger job>/<job>, so they cannot collide with jobs of the parent.
+pipeline_jobs() {
+  work=$(mktemp -d) || return 1
+  printf '[{"id": %s, "prefix": ""}]' "$1" > "$work/queue"
+  : > "$work/jobs"
+  jobs_failed=0
+  while [ "$(jq length "$work/queue")" -gt 0 ]; do
+    child_id=$(jq -r '.[0].id' "$work/queue")
+    prefix=$(jq -r '.[0].prefix' "$work/queue")
+    if ! gitlab_list "pipelines/${child_id}/jobs" "$work/list"; then
+      jobs_failed=1
+      break
+    fi
+    jq --arg prefix "$prefix" 'map(.name = $prefix + .name)' "$work/list" >> "$work/jobs"
+    if ! gitlab_list "pipelines/${child_id}/bridges" "$work/list"; then
+      jobs_failed=1
+      break
+    fi
+    jq --arg prefix "$prefix" --argjson project "$GITLAB_PROJECT_ID" --slurpfile queue "$work/queue" \
+      '$queue[0][1:] + [.[] | select(.downstream_pipeline.project_id? == $project)
+        | {id: .downstream_pipeline.id, prefix: ($prefix + .name + "/")}]' "$work/list" > "$work/queue.new"
+    mv "$work/queue.new" "$work/queue"
+  done
+  if [ "$jobs_failed" = 0 ]; then
+    jq -s 'add // []' "$work/jobs"
+  fi
+  rm -rf "$work"
+  return "$jobs_failed"
+}
+
+# Reads the jobs of the pipeline into ci_jobs_json, returns 1 after repeated failures.
+read_jobs() {
+  for attempt in 1 2 3 4 5; do
+    if ci_jobs_json=$(pipeline_jobs "$pipeline_id"); then
+      return 0
+    fi
+    echo "Reading the jobs of pipeline ${pipeline_id} failed, attempt ${attempt}."
+    sleep "$POLL_TIMEOUT"
+  done
+  return 1
 }
 
 # github <method> <path> [json body]
 github() {
   if [ $# -ge 3 ]; then
-    curl --silent --request "$1" --header "Authorization: token ${GITHUB_TOKEN}" \
+    curl --silent --retry 3 --max-time 60 --request "$1" --header "Authorization: token ${GITHUB_TOKEN}" \
       --header "Accept: application/vnd.github+json" --data "$3" "$GITHUB_API/$2"
   else
-    curl --silent --request "$1" --header "Authorization: token ${GITHUB_TOKEN}" \
+    curl --silent --retry 3 --max-time 60 --request "$1" --header "Authorization: token ${GITHUB_TOKEN}" \
       --header "Accept: application/vnd.github+json" "$GITHUB_API/$2"
   fi
 }
@@ -79,6 +164,13 @@ check_fields() {
     failed) echo '{"status": "completed", "conclusion": "failure"}' ;;
     canceled) echo '{"status": "completed", "conclusion": "cancelled"}' ;;
     skipped) echo '{"status": "completed", "conclusion": "skipped"}' ;;
+    manual)
+      if [ "$STOP_ON_MANUAL" = "true" ]; then
+        echo '{"status": "completed", "conclusion": "action_required"}'
+      else
+        echo '{"status": "queued"}'
+      fi
+      ;;
     running) echo '{"status": "in_progress"}' ;;
     *) echo '{"status": "queued"}' ;;
   esac
@@ -105,9 +197,17 @@ check_update() {
 # that attaches to a running pipeline updates them instead of adding new ones.
 checks_init() {
   check_state="${RUNNER_TEMP:-/tmp}/github2lab_checks_${pipeline_id}.json"
-  github GET "repos/${GITHUB_REPOSITORY}/commits/${target_sha}/check-runs?per_page=100" |
-    jq --arg prefix "$CHECK_PREFIX" '[.check_runs[]? | select(.name | startswith($prefix))
-      | {key: .name, value: {id: (.id | tostring), state: ""}}] | from_entries' > "$check_state"
+  : > "$check_state.pages"
+  check_page=1
+  while :; do
+    github GET "repos/${GITHUB_REPOSITORY}/commits/${target_sha}/check-runs?per_page=100&page=${check_page}" > "$check_state.page"
+    jq '[.check_runs[]?]' "$check_state.page" >> "$check_state.pages" 2> /dev/null || break
+    [ "$(jq '.check_runs | length' "$check_state.page" 2> /dev/null || echo 0)" -ge 100 ] || break
+    check_page=$((check_page + 1))
+  done
+  jq -s --arg prefix "$CHECK_PREFIX" '[add // [] | .[] | select(.name | startswith($prefix))
+    | {key: .name, value: {id: (.id | tostring), state: ""}}] | from_entries' "$check_state.pages" > "$check_state"
+  rm -f "$check_state.page" "$check_state.pages"
 }
 
 checks_sync() {
@@ -180,10 +280,15 @@ else
   done
 fi
 
-if ! ci_output=$(gitlab "pipelines/${pipeline_id}") ||
-  ! ci_status=$(pipeline_status "$ci_output"); then
-  echo "Failed to read pipeline ${pipeline_id}: ${ci_output}"
-  exit 1
+deadline=0
+if [ "$MAX_WAIT_MINUTES" -gt 0 ]; then
+  deadline=$(( $(date +%s) + MAX_WAIT_MINUTES * 60 ))
+fi
+if ! read_pipeline; then
+  echo "GitLab was unreachable until the deadline, stopping to wait."
+  output finished false
+  output status unknown
+  exit 0
 fi
 ci_web_url=$(printf '%s' "$ci_output" | jq -r .web_url)
 if [ -n "${TARGET_SHA:-}" ]; then
@@ -204,10 +309,6 @@ output sha "$target_sha"
 if [ "$CHECK_RUNS" = "true" ]; then
   checks_init
 fi
-deadline=0
-if [ "$MAX_WAIT_MINUTES" -gt 0 ]; then
-  deadline=$(( $(date +%s) + MAX_WAIT_MINUTES * 60 ))
-fi
 
 ci_status="pending"
 
@@ -216,23 +317,18 @@ until pipeline_finished "$ci_status"
 do
   # Wait some seconds
    sleep "$POLL_TIMEOUT"
-   # Get the current state of the pipeline and the url of the website
-   if ! ci_output=$(gitlab "pipelines/${pipeline_id}") ||
-     ! ci_status=$(pipeline_status "$ci_output"); then
-     echo "Failed to read pipeline ${pipeline_id}: ${ci_output}"
-     exit 1
-   fi
-
-   echo "Current pipeline status: ${ci_status}"
-   if [ "$CHECK_RUNS" = "true" ]; then
-     ci_jobs_json=$(gitlab "pipelines/${pipeline_id}/jobs?per_page=100")
-     checks_sync
-   fi
-   # If the pipeline is running, print the current state (to end loop)
-   if [ "$ci_status" = "running" ]
-   then
-     echo "Checking pipeline status..."
-     set_status pending
+   # Get the current state of the pipeline, an outage reaching the deadline hands over below
+   if read_pipeline; then
+     echo "Current pipeline status: ${ci_status}"
+     if [ "$CHECK_RUNS" = "true" ] && read_jobs; then
+       checks_sync
+     fi
+     # If the pipeline is running, print the current state (to end loop)
+     if [ "$ci_status" = "running" ]
+     then
+       echo "Checking pipeline status..."
+       set_status pending
+     fi
    fi
    if [ "$deadline" -gt 0 ] && [ "$(date +%s)" -ge "$deadline" ] &&
      ! pipeline_finished "$ci_status"; then
@@ -249,7 +345,10 @@ output status "$ci_status"
 # Show status of the pipeline
 echo "Pipeline finished with status ${ci_status}"
 echo "Fetching all GitLab pipeline jobs involved"
-ci_jobs_json=$(gitlab "pipelines/${pipeline_id}/jobs?per_page=100")
+if ! read_jobs; then
+  echo "::warning title=GitLab jobs unavailable::The job list of pipeline ${pipeline_id} could not be read, job checks and summary are incomplete."
+  ci_jobs_json='[]'
+fi
 if [ "$CHECK_RUNS" = "true" ]; then
   checks_sync
 fi

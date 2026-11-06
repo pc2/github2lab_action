@@ -13,6 +13,11 @@ SPDX-License-Identifier: CC0-1.0
 - Pipeline trigger tokens support variables, mirror waiting and identity outputs.
 - Triggering retries while GitLab does not know a freshly pushed ref yet.
 - Mirroring retries pushes rejected by a locked remote branch.
+- Polling survives GitLab outages shorter than `POLL_FAILURE_MINUTES` and hands over when an outage reaches the deadline.
+- Job checks and artifact collection cover all jobs, including child pipelines in the same project.
+- Artifacts are streamed to disk with a transfer timeout.
+- `STOP_ON_MANUAL=true` finishes polling when a manual job blocks the pipeline.
+- Script tests run mirror, trigger, polling and collection against mocked APIs in CI.
 - Mirroring can push selected commits without starting another API pipeline.
 - GitLab workflow rules control push pipelines, mirroring does not add `ci.skip`.
 - Explicit pipelines support bounded polling, job checks, summaries and reporting controls.

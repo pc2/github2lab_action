@@ -1,0 +1,18 @@
+# SPDX-FileCopyrightText: 2026 Gerrit Pape <gerrit.pape@uni-paderborn.de>
+#
+# SPDX-License-Identifier: MIT
+
+name: Tests
+
+on: [push, pull_request, workflow_dispatch]
+
+jobs:
+  scripts:
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # Use version 7.0.1.
+      with:
+        persist-credentials: false
+    - name: Run the script tests against mocked APIs
+      run: python3 -B -m unittest discover -s tests -v
