@@ -77,7 +77,7 @@ while :; do
   git push "$@" gitlab "$push_ref" >push_out 2>&1
   ret_code=$?
   attempt=$((attempt + 1))
-  if [ $ret_code = 0 ] || [ $attempt -ge 5 ] || ! grep -q "cannot lock ref" push_out; then
+  if [ "$ret_code" = 0 ] || [ "$attempt" -ge 5 ] || ! grep -q "cannot lock ref" push_out; then
     break
   fi
   echo "The remote branch is locked by another push, retrying."
@@ -91,10 +91,10 @@ if [ "${MIRROR_ONLY:-false}" != "true" ] && grep "Everything up-to-date" < push_
   post_reply=$(curl --header "PRIVATE-TOKEN: $GITLAB_TOKEN" --silent --request POST -d "ref=$BRANCHNAME" "https://${GITLAB_HOSTNAME}/api/v4/projects/${GITLAB_PROJECT_ID}/pipeline")
   web_url=$(echo "$post_reply" | jq '.web_url')
   echo "Triggered pipeline can be found here: $web_url"
-  exit $ret_code
+  exit "$ret_code"
 fi 
 
-if [ $ret_code = 0 ]; then
+if [ "$ret_code" = 0 ]; then
   # Report, that pushing is done and add newline afterwards for formatting
   echo "Done pushing git-repo to https://${GITLAB_REPO_URL}"
 else
@@ -102,4 +102,4 @@ else
   echo "Seems as if an error occured while pushing to https://${GITLAB_REPO_URL}. See above for details"
 fi
 echo ""
-exit $ret_code
+exit "$ret_code"
