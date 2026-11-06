@@ -19,6 +19,7 @@ SET_STATUS=${SET_STATUS:-true}
 STATUS_CONTEXT=${STATUS_CONTEXT:-gitlab-ci}
 CHECK_RUNS=${CHECK_RUNS:-false}
 CHECK_PREFIX=${CHECK_PREFIX:-gitlab/}
+PIPELINE_CHECK_NAME=${PIPELINE_CHECK_NAME:-${CHECK_PREFIX}pipeline}
 SUMMARY=${SUMMARY:-false}
 
 API="https://${GITLAB_HOSTNAME}/api/v4/projects/${GITLAB_PROJECT_ID}"
@@ -205,7 +206,8 @@ checks_init() {
     [ "$(jq '.check_runs | length' "$check_state.page" 2> /dev/null || echo 0)" -ge 100 ] || break
     check_page=$((check_page + 1))
   done
-  jq -s --arg prefix "$CHECK_PREFIX" '[add // [] | .[] | select(.name | startswith($prefix))
+  jq -s --arg prefix "$CHECK_PREFIX" --arg pipeline "$PIPELINE_CHECK_NAME" \
+    '[add // [] | .[] | select((.name | startswith($prefix)) or .name == $pipeline)
     | {key: .name, value: {id: (.id | tostring), state: ""}}] | from_entries' "$check_state.pages" > "$check_state"
   rm -f "$check_state.page" "$check_state.pages"
 }
@@ -229,7 +231,7 @@ checks_sync() {
   done <<EOJOBS
 $(printf '%s' "$ci_jobs_json" | jq -c '.[]')
 EOJOBS
-  name="${CHECK_PREFIX}pipeline"
+  name=$PIPELINE_CHECK_NAME
   if [ "$changed" = true ] || [ "$(jq -r --arg name "$name" '.[$name].state // empty' "$check_state")" != "$ci_status" ]; then
     check_update "$name" "$ci_status" "$ci_web_url" "pipeline ${pipeline_id} ${ci_status}" \
       "$(printf '### GitLab pipeline [%s](%s): %s\n\n' "$pipeline_id" "$ci_web_url" "$ci_status"; jobs_table "$ci_jobs_json")"

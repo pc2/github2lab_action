@@ -385,6 +385,7 @@ Failed pipelines return a failing exit status.
 | `STOP_ON_MANUAL` | Set `true` to finish when a manual job blocks. |
 | `CHECK_RUNS` | Set `true` for a check per job and a pipeline summary check. |
 | `CHECK_PREFIX` | The check name prefix, defaulting to `gitlab/`. |
+| `PIPELINE_CHECK_NAME` | Pipeline check name, `<prefix>pipeline` by default. |
 | `SUMMARY` | Set `true` to append the job table to the workflow summary. |
 | `LOG_TRACES` | Set `false` to omit job traces from the workflow log. |
 | `SET_STATUS` | Set `false` to disable legacy commit statuses. |

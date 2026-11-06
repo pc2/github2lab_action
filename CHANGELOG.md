@@ -17,6 +17,7 @@ SPDX-License-Identifier: CC0-1.0
 - Job checks and artifact collection cover all jobs, including child pipelines in the same project.
 - Artifacts are streamed to disk with a transfer timeout.
 - `STOP_ON_MANUAL=true` finishes polling when a manual job blocks the pipeline.
+- `PIPELINE_CHECK_NAME` names the pipeline check, for example so that it sorts before its job checks.
 - Script tests run mirror, trigger, polling and collection against mocked APIs in CI.
 - Mirroring keeps its push output outside the checked out commit.
 - Mirroring can push selected commits without starting another API pipeline.

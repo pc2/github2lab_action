@@ -501,6 +501,26 @@ class StatusTests(ScriptTest):
         )
         self.assertFalse(any("/pipelines/789/" in r["url"] for r in self.requests()))
 
+    def test_pipeline_check_name_is_configurable_and_found_again(self):
+        self.state["check_runs"] = [{"id": 700, "name": "HPC 123"}]
+        result = self.run_script(
+            "get_ci_state.sh", CHECK_PREFIX="HPC 123 / ", PIPELINE_CHECK_NAME="HPC 123"
+        )
+        self.assertEqual(result.returncode, 0, result.stdout)
+        created = {
+            r["body"]["name"]
+            for r in self.requests()
+            if r["method"] == "POST" and "/check-runs" in r["url"]
+        }
+        self.assertEqual(created, {"HPC 123 / tests"})
+        self.assertTrue(
+            any(
+                r["url"].endswith("/check-runs/700") and r["body"]["name"] == "HPC 123"
+                for r in self.requests()
+                if r["method"] == "PATCH"
+            )
+        )
+
     def test_existing_checks_are_updated_across_pages(self):
         self.state["check_runs"] = [
             {"id": index, "name": f"other/{index}"} for index in range(99)
