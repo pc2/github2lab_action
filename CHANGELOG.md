@@ -18,6 +18,7 @@ SPDX-License-Identifier: CC0-1.0
 - Artifacts are streamed to disk with a transfer timeout.
 - `STOP_ON_MANUAL=true` finishes polling when a manual job blocks the pipeline.
 - Script tests run mirror, trigger, polling and collection against mocked APIs in CI.
+- Mirroring keeps its push output outside the checked out commit.
 - Mirroring can push selected commits without starting another API pipeline.
 - GitLab workflow rules control push pipelines, mirroring does not add `ci.skip`.
 - Explicit pipelines support bounded polling, job checks, summaries and reporting controls.

@@ -23,7 +23,9 @@ echo "URL is https://${GITLAB_REPO_URL}"
 # Add the remote Gitlab-Repo to the local git
 echo "adding gitlab-repo as remote"
 git remote add gitlab "https://TOKENUSER:${GITLAB_TOKEN}@${GITLAB_REPO_URL}" || exit 1
-trap 'git remote remove gitlab > /dev/null 2>&1 || :' 0
+# The push output stays outside the checkout
+push_out=$(mktemp "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/github2lab-push.XXXXXX") || exit 1
+trap 'git remote remove gitlab > /dev/null 2>&1 || :; rm -f "$push_out"' 0
 if [ -n "${MIRROR_SHA:-}" ]; then
   git rev-parse --verify --end-of-options "${MIRROR_SHA}^{commit}" > /dev/null || exit 1
   BRANCHNAME=${MIRROR_BRANCH:-$GITHUB_REF_NAME}
@@ -74,19 +76,19 @@ fi
 # Concurrent mirrors of one branch make the remote reject a push while the ref is locked, retry it.
 attempt=0
 while :; do
-  git push "$@" gitlab "$push_ref" >push_out 2>&1
+  git push "$@" gitlab "$push_ref" > "$push_out" 2>&1
   ret_code=$?
   attempt=$((attempt + 1))
-  if [ "$ret_code" = 0 ] || [ "$attempt" -ge 5 ] || ! grep -q "cannot lock ref" push_out; then
+  if [ "$ret_code" = 0 ] || [ "$attempt" -ge 5 ] || ! grep -q "cannot lock ref" "$push_out"; then
     break
   fi
   echo "The remote branch is locked by another push, retrying."
   sleep 5
 done
-push_out_var=$(cat push_out)
+push_out_var=$(cat "$push_out")
 echo "$push_out_var"
 
-if [ "${MIRROR_ONLY:-false}" != "true" ] && grep "Everything up-to-date" < push_out ; then
+if [ "${MIRROR_ONLY:-false}" != "true" ] && grep "Everything up-to-date" < "$push_out" ; then
   echo "No changes occured, so no need to push again; triggering Pipeline instead."
   post_reply=$(curl --header "PRIVATE-TOKEN: $GITLAB_TOKEN" --silent --request POST -d "ref=$BRANCHNAME" "https://${GITLAB_HOSTNAME}/api/v4/projects/${GITLAB_PROJECT_ID}/pipeline")
   web_url=$(echo "$post_reply" | jq '.web_url')
