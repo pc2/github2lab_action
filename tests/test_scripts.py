@@ -553,6 +553,16 @@ class ArtifactTests(ScriptTest):
         self.assertEqual(len(files), 151)
         self.assertLessEqual({"job_149.zip", "child_job_0.zip"}, files)
 
+    def test_status_file_records_the_job_status_of_each_archive(self):
+        self.state["jobs"] = {"123": [job(1, "build"), job(2, "check: [2]", status="failed")]}
+        self.state["bridges"] = {}
+        status_file = self.root / "status.json"
+        result = self.run_script("get_artifact.py", ARTIFACT_DIR=str(self.artifacts),
+                                 ARTIFACT_STATUS_FILE=str(status_file))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(status_file.read_text()),
+                         {"build.zip": "success", "check_[2].zip": "failed"})
+
     def test_interrupted_transfer_leaves_no_partial_archive(self):
         self.state["broken"] = ["7"]
         result = self.run_script("get_artifact.py", ARTIFACT_DIR=str(self.artifacts))

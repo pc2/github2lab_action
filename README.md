@@ -404,6 +404,8 @@ Set `MODE: get_artifact` and `PIPELINE_ID` to collect the monitored pipeline.
 With `ARTIFACT_STAGES`, only jobs in the listed stages are collected.
 `ARTIFACT_DIR` selects the download directory, defaulting to `artifacts`.
 Set `EXTRACT_ARTIFACTS=true` to unpack archives.
+`ARTIFACT_STATUS_FILE` receives the job status of each archive as JSON.
+Jobs may upload artifacts on failure, keep the file outside `ARTIFACT_DIR`.
 Set `UPLOAD_ARTIFACTS=false` to manage GitHub upload separately.
 Downloads can reuse an existing directory.
 HTTP failures do not create empty or partial archives.

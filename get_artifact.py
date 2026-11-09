@@ -12,6 +12,7 @@ It is designed to be called from within Github-Actions
 and uses environment-variables as input.
 """
 
+import json
 import os
 import subprocess
 import zipfile
@@ -124,19 +125,25 @@ def download_artifacts(job_list):
     """
     Download all artifacts from a list of jobs
     (ususally the ones in a single pipeline).
-    It takes only the list of jobs and returns nothing
+    It takes only the list of jobs and returns nothing.
+    ARTIFACT_STATUS_FILE optionally receives the job status of each archive,
+    since jobs may upload artifacts also when they fail.
     """
     # Create directory to store artifacts in
     os.makedirs(ARTIFACT_DIR, exist_ok=True)
+    statuses = {}
     for job in job_list:
         # If a job has an artifact (apart from the log), download it
         if any(e["file_type"] == "archive" for e in job["artifacts"]):
-            download_single_artifact(job)
+            statuses[download_single_artifact(job)] = job["status"]
         else:
             print(
                 "The following job does not exhibit "
                 + f"an artifact for download: {job['name']}"
             )
+    if os.getenv("ARTIFACT_STATUS_FILE"):
+        with open(os.environ["ARTIFACT_STATUS_FILE"], "w") as file:
+            json.dump(statuses, file, indent=2, sort_keys=True)
 
 
 def get_artifact_info(job):
@@ -160,13 +167,14 @@ def download_single_artifact(job):
     Retrieves the url of the artifact and writes the content to a file
     with the name of the job.
 
-    Takes the job as input and returns nothing.
+    Takes the job as input and returns the archive file name.
     """
     artifact = get_artifact_info(job)
     job_id = job["id"]
     job_name = sanitize(job["name"])
     artifact_root = os.path.realpath(ARTIFACT_DIR)
-    artifact_path = os.path.join(artifact_root, f"{job_name}.{artifact['file_format']}")
+    archive_name = f"{job_name}.{artifact['file_format']}"
+    artifact_path = os.path.join(artifact_root, archive_name)
     if os.path.dirname(os.path.realpath(artifact_path)) != artifact_root:
         raise ValueError("Artifact destination must stay inside ARTIFACT_DIR.")
     headers = {"PRIVATE-TOKEN": env["GITLAB_TOKEN"]}
@@ -192,8 +200,9 @@ def download_single_artifact(job):
             archive.extractall(ARTIFACT_DIR)
         os.remove(artifact_path)
         print(f"Extracted artifacts of job: {job['name']} into {ARTIFACT_DIR}.")
-        return
+        return archive_name
     print(f"Downloaded file from job: {job['name']} as {job_name}.")
+    return archive_name
 
 
 def sanitize(job_name):
